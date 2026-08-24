@@ -3,13 +3,14 @@ import { LiveKitRoom, RoomAudioRenderer, VideoTrack, useIsSpeaking, useParticipa
 import type { TrackReference } from "@livekit/components-core";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createLocalScreenTracks, isRemoteParticipant, ParticipantEvent, Track, type Participant, type Room } from "livekit-client";
-import { Camera, CameraOff, Cast, Expand, HeadphoneOff, Headphones, Mic, MicOff, Minimize2, MonitorUp, PhoneOff, ScreenShareOff, Settings, Volume2, X } from "lucide-react";
+import { Camera, CameraOff, Cast, Expand, HeadphoneOff, Headphones, LayoutGrid, Mic, MicOff, Minimize2, MonitorUp, PhoneOff, ScreenShareOff, Settings, Volume2, VolumeX, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getCallVolume, setCallVolume, type CallVolumeSource } from "../lib/callVolumes";
 import { getRuntimeConfig, getSupabase } from "../lib/supabase";
 import { APP_SETTINGS_EVENT, cameraDimensions, loadAppSettings, screenDimensions, type AppSettings } from "../lib/settings";
 
 type RtcCredentials = { token: string; url: string; room: string };
+type StageItem = { kind: "participant"; key: string; participant: Participant; cameraTrack?: TrackReference } | { kind: "screen"; key: string; track: TrackReference };
 
 interface VoiceStageProps {
   channel: Channel;
@@ -18,10 +19,11 @@ interface VoiceStageProps {
   onMinimize(): void;
   onExpand(): void;
   onLeave(): void;
+  onMove(channelId: string): void;
   onSettings(): void;
 }
 
-export function VoiceStage({ channel, profile, expanded, onMinimize, onExpand, onLeave, onSettings }: VoiceStageProps) {
+export function VoiceStage({ channel, profile, expanded, onMinimize, onExpand, onLeave, onMove, onSettings }: VoiceStageProps) {
   const [credentials, setCredentials] = useState<RtcCredentials | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -51,13 +53,13 @@ export function VoiceStage({ channel, profile, expanded, onMinimize, onExpand, o
   const media = loadAppSettings();
   return <div className={wrapper}>
     <LiveKitRoom token={credentials.token} serverUrl={credentials.url} connect audio={false} video={false} options={{ audioCaptureDefaults: audioOptions(media), videoCaptureDefaults: videoOptions(media), audioOutput: { deviceId: media.speakerId }, adaptiveStream: true, dynacast: true }} onDisconnected={onLeave}>
-      <Stage channel={channel} profile={profile} expanded={expanded} onMinimize={onMinimize} onExpand={onExpand} onLeave={onLeave} onSettings={onSettings} />
+      <Stage channel={channel} profile={profile} expanded={expanded} onMinimize={onMinimize} onExpand={onExpand} onLeave={onLeave} onMove={onMove} onSettings={onSettings} />
       <RoomAudioRenderer />
     </LiveKitRoom>
   </div>;
 }
 
-function Stage({ channel, profile, expanded, onMinimize, onExpand, onLeave, onSettings }: VoiceStageProps) {
+function Stage({ channel, profile, expanded, onMinimize, onExpand, onLeave, onMove, onSettings }: VoiceStageProps) {
   const room = useRoomContext();
   const participants = useParticipants();
   const cameraTracks = useTracks([Track.Source.Camera]);
@@ -69,8 +71,13 @@ function Stage({ channel, profile, expanded, onMinimize, onExpand, onLeave, onSe
   const [picker, setPicker] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [deviceError, setDeviceError] = useState("");
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const presenceRef = useRef<RealtimeChannel | undefined>(undefined);
   const joinedAtRef = useRef(new Date().toISOString());
+  const onLeaveRef = useRef(onLeave);
+  const onMoveRef = useRef(onMove);
+  onLeaveRef.current = onLeave;
+  onMoveRef.current = onMove;
 
   useEffect(() => {
     const apply = async (settings = loadAppSettings()) => {
@@ -112,40 +119,86 @@ function Stage({ channel, profile, expanded, onMinimize, onExpand, onLeave, onSe
   }, [channel.id, channel.serverId, profile.id]);
 
   useEffect(() => {
+    let disposed = false;
+    let commands: RealtimeChannel | undefined;
+    void getSupabase().then((supabase) => {
+      if (disposed) return;
+      commands = supabase.channel(`voice-commands:${profile.id}:${channel.id}`).on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "voice_commands", filter: `target_user_id=eq.${profile.id}`,
+      }, (payload) => {
+        const command = payload.new as { id: string; server_id: string; action: "disconnect" | "move"; channel_id: string | null };
+        if (command.server_id !== channel.serverId) return;
+        void supabase.from("voice_commands").delete().eq("id", command.id).then(() => {
+          if (command.action === "disconnect") onLeaveRef.current();
+          else if (command.channel_id) onMoveRef.current(command.channel_id);
+        });
+      }).subscribe();
+    });
+    return () => { disposed = true; if (commands) void getSupabase().then((supabase) => supabase.removeChannel(commands!)); };
+  }, [channel.id, channel.serverId, profile.id]);
+
+  useEffect(() => {
     if (presenceRef.current) void presenceRef.current.track(voicePresence(profile, channel.id, mic, deafened, joinedAtRef.current));
   }, [channel.id, deafened, mic, profile]);
 
   useEffect(() => {
+    const selectedScreenIdentity = selectedKey?.startsWith("screen:") ? selectedKey.slice("screen:".length) : null;
     for (const participant of participants) {
       if (!isRemoteParticipant(participant)) continue;
       participant.setVolume(deafened ? 0 : getCallVolume(participant.identity, "microphone"), Track.Source.Microphone);
-      participant.setVolume(deafened ? 0 : getCallVolume(participant.identity, "screen"), Track.Source.ScreenShareAudio);
+      const watchingThisScreen = selectedScreenIdentity === participant.identity;
+      participant.setVolume(deafened || !watchingThisScreen ? 0 : getCallVolume(participant.identity, "screen"), Track.Source.ScreenShareAudio);
     }
-  }, [deafened, participants, cameraTracks, screenTracks]);
+  }, [deafened, participants, cameraTracks, screenTracks, selectedKey]);
 
   const cameras = useMemo(() => new Map(cameraTracks.map((track) => [track.participant.identity, track])), [cameraTracks]);
-  const previewParticipants = participants.slice(0, 4);
+  const stageItems = useMemo<StageItem[]>(() => [
+    ...screenTracks.map((track) => ({ kind: "screen" as const, key: `screen:${track.participant.identity}`, track })),
+    ...participants.map((participant) => ({ kind: "participant" as const, key: `participant:${participant.identity}`, participant, cameraTrack: cameras.get(participant.identity) })),
+  ], [cameras, participants, screenTracks]);
+  const selectedItem = stageItems.find((item) => item.key === selectedKey) ?? null;
+  const remainingItems = selectedItem ? stageItems.filter((item) => item.key !== selectedItem.key) : stageItems;
+  const previewParticipants = selectedItem?.kind === "participant" ? [selectedItem.participant, ...participants.filter((participant) => participant.identity !== selectedItem.participant.identity)].slice(0, 4) : participants.slice(0, selectedItem?.kind === "screen" ? 2 : 4);
+
+  useEffect(() => {
+    if (selectedKey && !stageItems.some((item) => item.key === selectedKey)) setSelectedKey(null);
+  }, [selectedKey, stageItems]);
 
   if (!expanded) return <div className="voice-pip">
     <header><div><span className="live-dot" /><strong>{channel.name}</strong><small>{participants.length} conectado{participants.length === 1 ? "" : "s"}</small></div><button title="Expandir chamada" onClick={onExpand}><Expand /></button></header>
-    <div className={`pip-participants count-${previewParticipants.length}`}>{previewParticipants.map((participant) => <MiniParticipant key={participant.identity} participant={participant} cameraTrack={cameras.get(participant.identity)} />)}</div>
+    {selectedItem?.kind === "screen" && <MiniTransmission track={selectedItem.track} />}
+    <div className={`pip-participants count-${previewParticipants.length} ${selectedItem?.kind === "screen" ? "with-screen" : ""}`}>{previewParticipants.map((participant) => <MiniParticipant key={participant.identity} participant={participant} cameraTrack={cameras.get(participant.identity)} />)}</div>
     {participants.length > 4 && <span className="pip-more">+{participants.length - 4} na chamada</span>}
     <CallControls compact mic={mic} camera={camera} deafened={deafened} sharing={sharing} onMic={() => void toggleMic(room, mic, setMic, setDeviceError)} onCamera={() => void toggleCamera(room, camera, setCamera, setDeviceError)} onDeafen={() => setDeafened((value) => !value)} onShare={onExpand} onSettings={onSettings} onLeave={onLeave} />
   </div>;
 
   return <div className="stage-shell">
     <header className="stage-header"><div><span className="live-dot" /> AO VIVO</div><h3>{channel.name} · {participants.length} conectado{participants.length === 1 ? "" : "s"}</h3><button title="Minimizar e continuar navegando" onClick={onMinimize}><Minimize2 /></button></header>
-    <div className={`participant-grid count-${Math.min(participants.length + screenTracks.length, 6)}`}>
+    <div className={`call-stage ${selectedItem ? "has-focus" : "gallery-mode"}`}>
       {deviceError && <div className="call-error">{deviceError}</div>}
-      {screenTracks.map((track) => <TransmissionCard key={`${track.participant.identity}-screen`} track={track} deafened={deafened} />)}
-      {participants.map((participant) => <ParticipantCard key={participant.identity} participant={participant} cameraTrack={cameras.get(participant.identity)} deafened={deafened} />)}
+      {selectedItem ? <>
+        <div className="call-focus-main">
+          <button className="clear-call-focus" title="Voltar para a visualizacao de todos" onClick={() => setSelectedKey(null)}><LayoutGrid /> Mostrar todos</button>
+          <StageItemCard item={selectedItem} deafened={deafened} focused />
+        </div>
+        <div className={`call-thumbnail-strip count-${Math.min(remainingItems.length, 8)}`}>
+          {remainingItems.map((item) => <StageItemCard key={item.key} item={item} deafened={deafened} compact onSelect={() => setSelectedKey(item.key)} />)}
+        </div>
+      </> : <div className={`call-gallery count-${Math.min(stageItems.length, 8)}`}>
+        {stageItems.map((item) => <StageItemCard key={item.key} item={item} deafened={deafened} onSelect={() => setSelectedKey(item.key)} />)}
+      </div>}
     </div>
     <CallControls mic={mic} camera={camera} deafened={deafened} sharing={sharing} onMic={() => void toggleMic(room, mic, setMic, setDeviceError)} onCamera={() => void toggleCamera(room, camera, setCamera, setDeviceError)} onDeafen={() => setDeafened((value) => !value)} onShare={() => sharing ? void stopShare(room, () => setSharing(false)) : setPicker(true)} onSettings={onSettings} onLeave={onLeave} />
     {picker && <ScreenPicker onClose={() => setPicker(false)} onStarted={() => { setSharing(true); setPicker(false); }} />}
   </div>;
 }
 
-function ParticipantCard({ participant, cameraTrack, deafened }: { participant: Participant; cameraTrack?: TrackReference; deafened: boolean }) {
+function StageItemCard({ item, deafened, compact = false, focused = false, onSelect }: { item: StageItem; deafened: boolean; compact?: boolean; focused?: boolean; onSelect?(): void }) {
+  if (item.kind === "screen") return <TransmissionCard track={item.track} deafened={deafened} compact={compact} focused={focused} onSelect={onSelect} />;
+  return <ParticipantCard participant={item.participant} cameraTrack={item.cameraTrack} deafened={deafened} compact={compact} focused={focused} onSelect={onSelect} />;
+}
+
+function ParticipantCard({ participant, cameraTrack, deafened, compact = false, focused = false, onSelect }: { participant: Participant; cameraTrack?: TrackReference; deafened: boolean; compact?: boolean; focused?: boolean; onSelect?(): void }) {
   const speaking = useIsSpeaking(participant);
   const [, revise] = useState(0);
   useEffect(() => {
@@ -155,10 +208,10 @@ function ParticipantCard({ participant, cameraTrack, deafened }: { participant: 
   }, [participant]);
   const muted = !participant.isMicrophoneEnabled;
   const avatar = participantAvatar(participant);
-  return <article className={`participant-card ${speaking ? "speaking" : ""}`}>
+  return <article className={`participant-card ${speaking ? "speaking" : ""} ${compact ? "compact" : ""} ${focused ? "focused" : ""} ${onSelect ? "selectable" : ""}`} role={onSelect ? "button" : undefined} tabIndex={onSelect ? 0 : undefined} aria-label={onSelect ? `Destacar ${participant.name || participant.identity}` : undefined} onClick={onSelect} onKeyDown={(event) => activateWithKeyboard(event, onSelect)}>
     {cameraTrack ? <VideoTrack trackRef={cameraTrack} /> : <div className="participant-identity">{avatar ? <img src={avatar} alt="" /> : <span>{initials(participant.name || participant.identity)}</span>}</div>}
     <div className="participant-label"><span>{muted ? <MicOff /> : <Mic />}{participant.name || participant.identity}{participant.isLocal && <small>Voce</small>}</span>{cameraTrack && <Camera />}</div>
-    {!participant.isLocal && isRemoteParticipant(participant) && <VolumeControl participant={participant} source="microphone" disabled={deafened} />}
+    {!participant.isLocal && isRemoteParticipant(participant) && <VolumeControl participant={participant} source="microphone" disabled={deafened} compact={compact} />}
   </article>;
 }
 
@@ -171,11 +224,15 @@ function MiniParticipant({ participant, cameraTrack }: { participant: Participan
   </div>;
 }
 
-function TransmissionCard({ track, deafened }: { track: TrackReference; deafened: boolean }) {
-  return <article className="participant-card transmission-card"><VideoTrack trackRef={track} /><div className="participant-label"><span><MonitorUp />{track.participant.name || track.participant.identity}<small>Transmissao</small></span></div>{isRemoteParticipant(track.participant) && <VolumeControl participant={track.participant} source="screen" disabled={deafened} />}</article>;
+function MiniTransmission({ track }: { track: TrackReference }) {
+  return <div className="pip-transmission"><VideoTrack trackRef={track} /><span><MonitorUp />{track.participant.name || track.participant.identity}</span></div>;
 }
 
-function VolumeControl({ participant, source, disabled }: { participant: Participant; source: CallVolumeSource; disabled: boolean }) {
+function TransmissionCard({ track, deafened, compact = false, focused = false, onSelect }: { track: TrackReference; deafened: boolean; compact?: boolean; focused?: boolean; onSelect?(): void }) {
+  return <article className={`participant-card transmission-card ${compact ? "compact" : ""} ${focused ? "focused watching" : "not-watching"} ${onSelect ? "selectable" : ""}`} role={onSelect ? "button" : undefined} tabIndex={onSelect ? 0 : undefined} aria-label={onSelect ? `Assistir transmissao de ${track.participant.name || track.participant.identity}` : undefined} onClick={onSelect} onKeyDown={(event) => activateWithKeyboard(event, onSelect)}><VideoTrack trackRef={track} /><div className="participant-label"><span><MonitorUp />{track.participant.name || track.participant.identity}<small>Transmissao</small></span></div>{focused && isRemoteParticipant(track.participant) ? <VolumeControl participant={track.participant} source="screen" disabled={deafened} compact={compact} /> : <div className="transmission-silent"><VolumeX /><span>{focused ? "Audio desativado" : "Clique para assistir"}</span></div>}</article>;
+}
+
+function VolumeControl({ participant, source, disabled, compact = false }: { participant: Participant; source: CallVolumeSource; disabled: boolean; compact?: boolean }) {
   const [volume, setVolume] = useState(() => getCallVolume(participant.identity, source));
   const trackSource = source === "microphone" ? Track.Source.Microphone : Track.Source.ScreenShareAudio;
   const change = (next: number) => {
@@ -183,7 +240,13 @@ function VolumeControl({ participant, source, disabled }: { participant: Partici
     setCallVolume(participant.identity, source, next);
     if (isRemoteParticipant(participant)) participant.setVolume(disabled ? 0 : next, trackSource);
   };
-  return <label className="participant-volume" title={source === "microphone" ? "Volume desta pessoa apenas para voce" : "Volume desta transmissao apenas para voce"}><Volume2 /><input type="range" min="0" max="100" value={Math.round(volume * 100)} onChange={(event) => change(Number(event.target.value) / 100)} disabled={disabled} /><b>{Math.round(volume * 100)}%</b></label>;
+  return <label className={`participant-volume ${compact ? "compact" : ""}`} title={source === "microphone" ? "Volume desta pessoa apenas para voce" : "Volume desta transmissao apenas para voce"} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><Volume2 /><input type="range" min="0" max="100" value={Math.round(volume * 100)} onChange={(event) => change(Number(event.target.value) / 100)} disabled={disabled} /><b>{Math.round(volume * 100)}%</b></label>;
+}
+
+function activateWithKeyboard(event: React.KeyboardEvent<HTMLElement>, action?: () => void) {
+  if (!action || (event.key !== "Enter" && event.key !== " ")) return;
+  event.preventDefault();
+  action();
 }
 
 function CallControls({ compact = false, mic, camera, deafened, sharing, onMic, onCamera, onDeafen, onShare, onSettings, onLeave }: { compact?: boolean; mic: boolean; camera: boolean; deafened: boolean; sharing: boolean; onMic(): void; onCamera(): void; onDeafen(): void; onShare(): void; onSettings(): void; onLeave(): void }) {

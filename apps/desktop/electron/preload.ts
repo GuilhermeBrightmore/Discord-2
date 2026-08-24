@@ -22,5 +22,12 @@ contextBridge.exposeInMainWorld("discord2", {
       return () => ipcRenderer.removeListener("update:state", handler);
     },
   },
+  deepLinks: {
+    onInvite: (listener: (code: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, code: string) => listener(code);
+      ipcRenderer.on("deep-link:invite", handler);
+      return () => ipcRenderer.removeListener("deep-link:invite", handler);
+    },
+  },
   platform: process.platform,
 });

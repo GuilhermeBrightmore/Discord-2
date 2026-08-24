@@ -5,11 +5,15 @@ Aplicativo de comunidade criado do zero, sem aproveitar o projeto C++ anterior e
 ## O que esta pronto
 
 - Cadastro e login por e-mail com sessao criptografada pelo cofre nativo do sistema operacional.
-- Servidores, proprietario/administrador/membro, canais de texto e voz e convites com validade.
-- Mensagens e conversas diretas atualizadas em tempo real pelo Supabase Realtime.
+- Servidores, canais de texto/voz e links de convite com landing page, abertura automatica pelo protocolo `fungocord://` e confirmacao dentro do aplicativo.
+- Mensagens e conversas diretas em tempo real, com respostas, `@usuario`, `@everyone` e destaque visual de mencoes.
+- Cargos com cor, hierarquia e permissoes granulares, incluindo o poder Administrador que concede todos os poderes.
+- Expulsao, banimento, remocao de ban, registro de auditoria e protecao de hierarquia aplicados no proprio banco.
 - Presenca online, lista completa de membros por servidor e busca de pessoas.
 - Chamadas centralizadas com todos os participantes visiveis, estados de microfone, camera, varias transmissoes simultaneas e audio remoto.
 - Chamada persistente em modo PiP enquanto o usuario navega e volume individual, salvo localmente, para cada pessoa e transmissao.
+- Palco de chamada selecionavel: qualquer pessoa, camera ou transmissao pode ser destacada no centro; os demais itens se ajustam em uma bandeja inferior e somente a transmissao assistida reproduz audio.
+- Proprietarios e moderadores autorizados podem desconectar membros da call ou move-los para outra sala pelo menu de contexto e por arrastar-e-soltar.
 - Configuracoes do aplicativo para escolher microfone, fone/alto-falante e camera, com cancelamento de eco, supressao de ruido, ganho automatico e preferencias de video.
 - Compartilhamento de janela ou monitor com 480p, 720p, 1080p, 1440p ou resolucao original; 5, 15, 30 ou 60 FPS; audio do sistema e previa.
 - API stateless pronta para Vercel, servidor local em `0.0.0.0` e build Windows instalavel/portatil.

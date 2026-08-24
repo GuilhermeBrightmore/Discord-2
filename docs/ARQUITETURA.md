@@ -2,7 +2,7 @@
 
 ## Producao
 
-O Electron conversa diretamente com o Supabase usando somente a chave publica e o JWT do usuario. As politicas RLS sao a fronteira de autorizacao para perfis, membros, canais, mensagens, conversas e Storage. O Supabase Realtime transmite mudancas do PostgreSQL e presenca efemera.
+O Electron conversa diretamente com o Supabase usando somente a chave publica e o JWT do usuario. As politicas RLS e funcoes RPC sao a fronteira de autorizacao para perfis, membros, cargos, hierarquia, moderacao, canais, mensagens, conversas, auditoria e Storage. O Supabase Realtime transmite mudancas do PostgreSQL, comandos efemeros de moderacao de voz e presenca.
 
 A aplicacao Next.js em `apps/api` e deliberadamente pequena e stateless para escalar em funcoes Vercel. Ela valida o JWT no Supabase, confirma que o usuario pertence ao servidor/canal e assina um token LiveKit com duracao de dez minutos. A chave `service_role` e o segredo LiveKit existem apenas nessa API.
 
@@ -24,5 +24,7 @@ O modo LAN e indicado para redes privadas confiaveis. Ele usa HTTP/WS sem TLS. P
 - Function: `app/api/[...route]/route.ts`
 - Endpoint de saude: `/api/health`
 - Endpoint de token: `POST /api/rtc/token`
+- Preview publico de convite: `GET /api/invites/:code`
+- Landing de convite: `/invite/:code`
 
 Variaveis obrigatorias: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `PUBLIC_LIVEKIT_URL` e `ALLOWED_ORIGINS`.

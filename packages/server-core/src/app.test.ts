@@ -24,4 +24,10 @@ describe("API", () => {
     const response = await makeApp(env).request("/api/rtc/token", { method: "POST", body: "{}" });
     expect(response.status).toBe(401);
   });
+
+  it("rejeita codigo de convite malformado sem consultar dados", async () => {
+    const response = await makeApp(env).request("/api/invites/!");
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: "Convite invalido" });
+  });
 });

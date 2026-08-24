@@ -8,6 +8,7 @@ interface Window {
     screens: { list(): Promise<DesktopSource[]>; select(sourceId: string, shareAudio: boolean): Promise<void> };
     clipboard: { writeText(value: string): Promise<boolean> };
     updates: { getState(): Promise<UpdateState>; check(): Promise<UpdateState>; install(): Promise<void>; onState(listener: (state: UpdateState) => void): () => void };
+    deepLinks: { onInvite(listener: (code: string) => void): () => void };
     platform: string;
   };
 }

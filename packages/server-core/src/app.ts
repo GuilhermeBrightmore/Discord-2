@@ -27,6 +27,26 @@ export function makeApp(environment: Record<string, string | undefined> = proces
   });
   app.get("/api/config", (context) => context.json({ livekitUrl: env.PUBLIC_LIVEKIT_URL ?? env.LIVEKIT_URL }));
 
+  app.get("/api/invites/:code", async (context) => {
+    const code = context.req.param("code").trim().toLowerCase();
+    if (!/^[a-z0-9_-]{4,64}$/.test(code)) return context.json({ error: "Convite invalido" }, 400);
+    const { data: invite, error } = await admin
+      .from("invites")
+      .select("code, expires_at, max_uses, uses, server:servers(id, name, icon_url)")
+      .ilike("code", code)
+      .maybeSingle();
+    const server = invite?.server as unknown as { id: string; name: string; icon_url: string | null } | null;
+    const expired = invite?.expires_at && new Date(invite.expires_at).getTime() <= Date.now();
+    const exhausted = invite?.max_uses != null && invite.uses >= invite.max_uses;
+    if (error || !invite || !server || expired || exhausted) return context.json({ error: "Convite invalido ou expirado" }, 404);
+    const { count } = await admin.from("server_members").select("user_id", { head: true, count: "exact" }).eq("server_id", server.id);
+    return context.json({
+      code: invite.code,
+      server: { id: server.id, name: server.name, iconUrl: server.icon_url, memberCount: count ?? 0 },
+      expiresAt: invite.expires_at,
+    });
+  });
+
   app.use("/api/rtc/*", async (context, next) => {
     const token = bearerToken(context.req.header("Authorization"));
     if (!token) return context.json({ error: "Autenticacao necessaria" }, 401);

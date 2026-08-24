@@ -6,9 +6,52 @@ import path from "node:path";
 let windowRef: BrowserWindow | null = null;
 let selectedSourceId: string | null = null;
 let selectedAudio = false;
+let pendingInviteCode: string | null = null;
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 type UpdateState = { status: "idle" | "checking" | "available" | "downloading" | "downloaded" | "current" | "error"; version?: string; percent?: number; message?: string };
 let updateState: UpdateState = { status: "idle", version: app.getVersion() };
+
+function inviteCodeFromUrl(value: string) {
+  try {
+    const link = new URL(value);
+    if (link.protocol !== "fungocord:") return null;
+    const parts = [link.hostname, ...link.pathname.split("/")].filter(Boolean);
+    const inviteIndex = parts.findIndex((part) => part.toLowerCase() === "invite");
+    const code = inviteIndex >= 0 ? parts[inviteIndex + 1] : null;
+    return code && /^[a-z0-9_-]{4,64}$/i.test(code) ? code : null;
+  } catch { return null; }
+}
+
+function receiveDeepLink(value: string) {
+  const code = inviteCodeFromUrl(value);
+  if (!code) return;
+  pendingInviteCode = code;
+  if (windowRef && !windowRef.webContents.isLoadingMainFrame()) {
+    windowRef.webContents.send("deep-link:invite", code);
+    pendingInviteCode = null;
+  }
+  if (windowRef) {
+    if (windowRef.isMinimized()) windowRef.restore();
+    windowRef.show();
+    windowRef.focus();
+  }
+}
+
+if (process.defaultApp && process.argv[1]) app.setAsDefaultProtocolClient("fungocord", process.execPath, [path.resolve(process.argv[1])]);
+else app.setAsDefaultProtocolClient("fungocord");
+
+const singleInstance = app.requestSingleInstanceLock();
+if (!singleInstance) app.quit();
+else {
+  app.on("second-instance", (_event, argv) => {
+    const link = argv.find((argument) => argument.startsWith("fungocord://"));
+    if (link) receiveDeepLink(link);
+    else if (windowRef) { windowRef.show(); windowRef.focus(); }
+  });
+  app.on("open-url", (event, url) => { event.preventDefault(); receiveDeepLink(url); });
+  const initialLink = process.argv.find((argument) => argument.startsWith("fungocord://"));
+  if (initialLink) receiveDeepLink(initialLink);
+}
 
 function sessionFile() { return path.join(app.getPath("userData"), "session.bin"); }
 
@@ -56,11 +99,16 @@ function createWindow() {
     const allowed = isDev ? url.startsWith(process.env.VITE_DEV_SERVER_URL!) : url.startsWith("file://");
     if (!allowed) event.preventDefault();
   });
+  windowRef.webContents.on("did-finish-load", () => {
+    if (!pendingInviteCode) return;
+    windowRef?.webContents.send("deep-link:invite", pendingInviteCode);
+    pendingInviteCode = null;
+  });
   if (isDev) void windowRef.loadURL(process.env.VITE_DEV_SERVER_URL!);
   else void windowRef.loadFile(path.join(__dirname, "../dist/index.html"));
 }
 
-app.whenReady().then(() => {
+if (singleInstance) app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => callback(["media", "display-capture"].includes(permission)));
   session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
     const sources = await desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 640, height: 360 }, fetchWindowIcons: true });

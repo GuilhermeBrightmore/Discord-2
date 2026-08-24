@@ -10,4 +10,6 @@
 - Rode `npm audit`, atualize Electron/Next.js/Supabase/LiveKit e recompile os executaveis regularmente.
 - Proteja a branch principal depois da primeira publicacao. O `publicar-github.bat` usa force push por solicitacao explicita e pede confirmacao se encontrar conteudo.
 
-O renderer Electron executa com `contextIsolation`, sandbox e `nodeIntegration: false`. A ponte preload expõe somente configuracao publica, sessao criptografada e selecao de fonte de tela. Navegacao remota e novas janelas internas sao bloqueadas.
+O renderer Electron executa com `contextIsolation`, sandbox e `nodeIntegration: false`. A ponte preload expoe somente operacoes limitadas de configuracao publica, sessao criptografada, tela, clipboard, atualizacoes e convites profundos. Navegacao remota e novas janelas internas sao bloqueadas.
+
+Permissoes, hierarquia, expulsao, banimento, cargos e comandos de moderacao de voz sao validados por funcoes `security definer` no PostgreSQL; esconder um botao no cliente nunca e tratado como autorizacao. O endpoint publico de convite retorna somente nome, icone e quantidade de membros do servidor, sem listar usuarios ou expor dados privados.

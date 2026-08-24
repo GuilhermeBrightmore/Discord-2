@@ -1,9 +1,10 @@
 import type { Profile } from "@discord2/contracts";
-import { LogOut, MessageSquarePlus, Search, SendHorizontal, Settings, UserRoundPlus } from "lucide-react";
+import { CornerUpLeft, LogOut, MessageSquarePlus, Search, SendHorizontal, Settings, UserRoundPlus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getSupabase } from "../lib/supabase";
-import { loadDirectMessages, openDirect, searchProfiles, sendDirectMessage, type DirectConversation } from "../lib/data";
+import { loadDirectMessages, openDirect, searchProfiles, sendDirectMessage, type DirectConversation, type DirectMessage } from "../lib/data";
 import { loadAppSettings } from "../lib/settings";
+import { MessageBody } from "./MessageBody";
 
 export function DirectSidebar({ profile, conversations, activeId, onOpen, onRefresh, onSettings, onLogout }: { profile: Profile; conversations: DirectConversation[]; activeId?: string; onOpen(id: string): void; onRefresh(): Promise<void>; onSettings(): void; onLogout(): void }) {
   const [searching, setSearching] = useState(false);
@@ -15,14 +16,16 @@ export function DirectSidebar({ profile, conversations, activeId, onOpen, onRefr
 }
 
 export function DirectChat({ conversation, me }: { conversation?: DirectConversation; me: Profile }) {
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [replying, setReplying] = useState<DirectMessage | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!conversation) {
       setMessages([]);
+      setReplying(null);
       return;
     }
     let channel: any; let disposed = false;
@@ -36,8 +39,8 @@ export function DirectChat({ conversation, me }: { conversation?: DirectConversa
     if (marker && typeof marker.scrollIntoView === "function") marker.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
   if (!conversation) return <main className="empty-state"><div className="empty-icon"><MessageSquarePlus /></div><h2>Mensagens diretas</h2><p>Escolha uma conversa ou encontre uma pessoa.</p></main>;
-  async function submit(event: React.FormEvent) { event.preventDefault(); if (!body.trim() || sending) return; setSending(true); setError(""); try { await sendDirectMessage(conversation!.id, me.id, body); setBody(""); } catch (cause) { setError(cause instanceof Error ? cause.message : "Nao foi possivel enviar"); } finally { setSending(false); } }
-  return <main className="chat-pane"><header className="topbar"><div className="channel-title"><Avatar profile={conversation.profile} /><strong>{conversation.profile.displayName}</strong><span>@{conversation.profile.username}</span></div></header><div className="message-list"><div className="channel-welcome"><Avatar profile={conversation.profile} /><h2>{conversation.profile.displayName}</h2><p>Este e o inicio da conversa com @{conversation.profile.username}.</p></div>{error && <div className="notice error">{error}</div>}{messages.map((message) => <article className="message" key={message.id}><Avatar profile={message.author} /><div className="message-content"><div className="message-meta"><strong>{message.author?.displayName ?? "Usuario"}</strong><time>{new Date(message.createdAt).toLocaleString("pt-BR")}</time></div><p>{message.body}</p></div></article>)}<div ref={bottom} /></div><form className="composer" onSubmit={submit}><textarea value={body} onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && loadAppSettings().sendWithEnter) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={`Mensagem para @${conversation.profile.username}`} /><button className="send-button" disabled={!body.trim() || sending}><SendHorizontal /></button></form></main>;
+  async function submit(event: React.FormEvent) { event.preventDefault(); if (!body.trim() || sending) return; setSending(true); setError(""); try { await sendDirectMessage(conversation!.id, me.id, body, replying?.id); setBody(""); setReplying(null); } catch (cause) { setError(cause instanceof Error ? cause.message : "Nao foi possivel enviar"); } finally { setSending(false); } }
+  return <main className="chat-pane"><header className="topbar"><div className="channel-title"><Avatar profile={conversation.profile} /><strong>{conversation.profile.displayName}</strong><span>@{conversation.profile.username}</span></div></header><div className="message-list"><div className="channel-welcome"><Avatar profile={conversation.profile} /><h2>{conversation.profile.displayName}</h2><p>Este e o inicio da conversa com @{conversation.profile.username}.</p></div>{error && <div className="notice error">{error}</div>}{messages.map((message) => <article className="message" key={message.id}><Avatar profile={message.author} /><div className="message-content">{message.reply && <div className="message-reply"><CornerUpLeft /><strong>{message.reply.author?.displayName ?? "Usuario"}</strong><span>{message.reply.body}</span></div>}<div className="message-meta"><strong>{message.author?.displayName ?? "Usuario"}</strong><time>{new Date(message.createdAt).toLocaleString("pt-BR")}</time></div><MessageBody body={message.body} me={me.username} /></div><div className="message-actions"><button title="Responder" onClick={() => setReplying(message)}><CornerUpLeft /></button></div></article>)}<div ref={bottom} /></div><div className="composer-shell">{replying && <div className="replying-banner"><span>Respondendo a <strong>{replying.author?.displayName ?? "Usuario"}</strong></span><small>{replying.body}</small><button onClick={() => setReplying(null)}><X /></button></div>}<form className="composer" onSubmit={submit}><textarea value={body} onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && loadAppSettings().sendWithEnter) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={`Mensagem para @${conversation.profile.username}`} /><button className="send-button" disabled={!body.trim() || sending}><SendHorizontal /></button></form></div></main>;
 }
 
 export function Avatar({ profile }: { profile?: Profile | null }) { const displayName = profile?.displayName || "Usuario"; return <div className="avatar">{profile?.avatarUrl ? <img src={profile.avatarUrl} /> : displayName.slice(0, 2).toUpperCase()}</div>; }
