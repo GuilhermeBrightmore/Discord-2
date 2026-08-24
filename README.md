@@ -1,84 +1,84 @@
 # FungoCord
 
-Aplicativo de comunidade criado do zero, sem aproveitar o projeto C++ anterior e sem conexoes P2P entre usuarios. O cliente e um aplicativo Electron com React e TypeScript; dados e autenticacao usam Supabase; voz, camera e compartilhamento de tela passam por um servidor SFU LiveKit.
+Community application built from scratch. The client is an Electron application using React and TypeScript; data and authentication are handled by Supabase; voice, camera, and screen sharing are powered by a LiveKit SFU server.
 
-## O que esta pronto
+## What's ready
 
-- Cadastro e login por e-mail com sessao criptografada pelo cofre nativo do sistema operacional.
-- Servidores, canais de texto/voz e links de convite com landing page, abertura automatica pelo protocolo `fungocord://` e confirmacao dentro do aplicativo.
-- Mensagens e conversas diretas em tempo real, com respostas, `@usuario`, `@everyone` e destaque visual de mencoes.
-- Cargos com cor, hierarquia e permissoes granulares, incluindo o poder Administrador que concede todos os poderes.
-- Expulsao, banimento, remocao de ban, registro de auditoria e protecao de hierarquia aplicados no proprio banco.
-- Presenca online, lista completa de membros por servidor e busca de pessoas.
-- Chamadas centralizadas com todos os participantes visiveis, estados de microfone, camera, varias transmissoes simultaneas e audio remoto.
-- Chamada persistente em modo PiP enquanto o usuario navega e volume individual, salvo localmente, para cada pessoa e transmissao.
-- Palco de chamada selecionavel: qualquer pessoa, camera ou transmissao pode ser destacada no centro; os demais itens se ajustam em uma bandeja inferior e somente a transmissao assistida reproduz audio.
-- Proprietarios e moderadores autorizados podem desconectar membros da call ou move-los para outra sala pelo menu de contexto e por arrastar-e-soltar.
-- Configuracoes do aplicativo para escolher microfone, fone/alto-falante e camera, com cancelamento de eco, supressao de ruido, ganho automatico e preferencias de video.
-- Compartilhamento de janela ou monitor com 480p, 720p, 1080p, 1440p ou resolucao original; 5, 15, 30 ou 60 FPS; audio do sistema e previa.
-- API stateless pronta para Vercel, servidor local em `0.0.0.0` e build Windows instalavel/portatil.
-- Politicas Row Level Security no banco, validacao de membro antes de emitir token de chamada e Electron isolado do Node.js.
+- Email sign-up and login (optional), with sessions encrypted through the operating system's native credential vault.
+- Servers, text/voice channels, and invite links with a landing page, automatic opening through the `fungocord://` protocol, and in-app confirmation.
+- Real-time messages and direct conversations, with replies, `@user`, `@everyone`, and visual mention highlighting.
+- Roles with colors, hierarchy, and granular permissions, including the Administrator permission, which grants all permissions.
+- Kicking, banning, unbanning, audit logging, and hierarchy protection enforced directly at the database level.
+- Online presence, complete server member lists, and people search.
+- Centralized calls with all participants visible (the call member list is currently a bit buggy), microphone/camera states, multiple simultaneous streams, and remote audio.
+- Persistent calls in PiP mode while navigating the app, plus locally saved individual volume controls for each person and stream.
+- Selectable call stage: any person, camera, or stream can be highlighted in the center; the remaining items are arranged in a bottom tray, and only the selected stream plays audio.
+- Authorized owners and moderators can disconnect members from a call or move them to another room through the context menu and drag-and-drop.
+- Application settings for selecting the microphone, headphones/speakers, and camera, with echo cancellation, noise suppression, automatic gain control, and video preferences.
+- Window or monitor sharing at 480p, 720p, 1080p, 1440p, or native resolution; 5, 15, 30, or 60 FPS; system audio and preview.
+- Stateless API ready for Vercel (uploading through GitHub makes the process easier), local server listening on `0.0.0.0`, and installable/portable Windows builds.
+- Row Level Security policies in the database, member validation before issuing call tokens, and an Electron environment isolated from Node.js.
 
-## Arquitetura
+## Architecture
 
 ```mermaid
 flowchart TD
-  A["Electron · React · TypeScript"] --> B["Supabase Auth, DB, Realtime e Storage"]
-  A --> C["API de tokens · Vercel ou local"]
+  A["Electron · React · TypeScript"] --> B["Supabase Auth, DB, Realtime and Storage"]
+  A --> C["Token API · Vercel or local"]
   C --> B
   C --> D["LiveKit SFU"]
   A --> D
 ```
 
-Nao ha conexao direta entre clientes: mensagens fluem pelo Supabase e toda midia passa pelo LiveKit.
+There is no direct connection between clients: messages flow through Supabase, and all media passes through LiveKit.
 
-## Inicio rapido local no Windows
+## Quick Start Locally on Windows
 
-Requisitos apenas para quem hospeda/compila: Windows 10/11, Node.js 24+, Git e Docker Desktop com pelo menos 7 GB de RAM disponivel.
+Requirements for hosting/building only: Windows 10/11, Node.js 24+, Git, and Docker Desktop with at least 7 GB of available RAM.
 
-1. Clique com o botao direito em `iniciar-local.bat` e escolha **Executar como administrador** para liberar as portas no Firewall.
-2. Na primeira execucao, aguarde a instalacao e o download dos containers.
-3. O script detecta o IPv4 principal, inicia Supabase e LiveKit, aplica a migracao e abre a API e o Electron.
-4. Para encerrar os containers, execute `parar-local.bat` e feche as duas janelas de desenvolvimento.
+1. Right-click `iniciar-local.bat` and choose **Run as administrator** to allow the required ports through the Firewall.
+2. On the first run, wait for the dependencies to be installed and the containers to be downloaded.
+3. The script detects the main IPv4 address, starts Supabase and LiveKit, applies the migration, and launches the API and Electron.
+4. To stop the containers, run `parar-local.bat` and close the two development windows.
 
-O servidor HTTP escuta em todas as interfaces. Para escolher manualmente o IP anunciado pelo LiveKit, execute antes `set DISCORD2_LAN_IP=192.168.1.50` no mesmo terminal.
+The HTTP server listens on all interfaces. To manually select the IP address advertised by LiveKit, run `set DISCORD2_LAN_IP=192.168.1.50` in the same terminal beforehand.
 
-| Servico | Porta | Protocolo |
+| Service | Port | Protocol |
 |---|---:|---|
-| API FungoCord | 8787 | TCP |
+| FungoCord API | 8787 | TCP |
 | Supabase API | 54321 | TCP |
-| LiveKit sinalizacao | 7880 | TCP |
+| LiveKit signaling | 7880 | TCP |
 | LiveKit ICE/TCP | 7881 | TCP |
 | LiveKit ICE/UDP | 7882 | UDP |
 
-## Publicacao em producao
+## Production Deployment
 
-1. Crie um projeto no Supabase e execute `enviar-banco-supabase.bat`. O script autentica o CLI, vincula o projeto e envia a migracao completa.
-2. Crie um projeto no LiveKit Cloud ou hospede seu proprio LiveKit com TLS.
-3. Na Vercel, importe o repositorio e selecione `apps/api` como **Root Directory**. Mantenha o Build Command como `npm run build` e o Output Directory como `.next`; o `vercel.json` dessa pasta tambem fixa esses valores para impedir caminhos duplicados. Cadastre `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `PUBLIC_LIVEKIT_URL` e `ALLOWED_ORIGINS` em **Settings > Environment Variables**. Depois faca um novo deploy. Use `publicar-vercel.bat` se preferir o CLI a partir da raiz do repositorio.
-4. Execute `compilar-exe.bat`. Informe a URL/chave publica do Supabase, URL da API Vercel e URL do LiveKit. O instalador NSIS e o executavel portatil saem em `apps/desktop/release`.
+1. Create a project in Supabase and run `enviar-banco-supabase.bat`. The script authenticates the CLI, links the project, and pushes the complete migration.
+2. Create a project on LiveKit Cloud or host your own LiveKit instance with TLS.
+3. On Vercel, import the repository and select `apps/api` as the **Root Directory**. Keep the Build Command as `npm run build` and the Output Directory as `.next`; the `vercel.json` in this folder also sets these values to prevent duplicated paths. Add `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `PUBLIC_LIVEKIT_URL`, and `ALLOWED_ORIGINS` under **Settings > Environment Variables**. Then deploy again. Use `publicar-vercel.bat` if you prefer using the CLI from the repository root.
+4. Run `compilar-exe.bat`. Enter the Supabase public URL/key, Vercel API URL, and LiveKit URL. The NSIS installer and portable executable will be generated in `apps/desktop/release`.
 
-A landing page e servida pela raiz do projeto Vercel. Por padrao, seus botoes levam ao release mais recente no GitHub; opcionalmente configure `NEXT_PUBLIC_DOWNLOAD_URL` na Vercel com um link de download direto.
+The landing page is served from the Vercel project root. By default, its buttons point to the latest release on GitHub; optionally, configure `NEXT_PUBLIC_DOWNLOAD_URL` on Vercel with a direct download link.
 
-## Publicar atualizacoes do aplicativo
+## Publishing Application Updates
 
-Execute `publicar-update.bat`, informe uma versao maior que a atual e um GitHub Personal Access Token com permissao **Contents: Read and write**. O script compila o instalador, cria um GitHub Release e envia os metadados usados pelo atualizador. Instalacoes do FungoCord verificam novas versoes ao abrir e a cada 30 minutos.
+Run `publicar-update.bat`, enter a version higher than the current one, and provide a GitHub Personal Access Token with **Contents: Read and write** permission. The script builds the installer, creates a GitHub Release, and uploads the metadata used by the updater. FungoCord installations check for new versions when launched and every 30 minutes.
 
-Ao atualizar ou corrigir uma instalacao existente, execute `enviar-banco-supabase.bat` novamente antes de recompilar e escolha a opcao **1**. A migracao inicial e idempotente: completa estruturas ausentes, recria funcoes e politicas de acesso e preserva contas, mensagens e demais dados existentes. Em seguida, o script aplica as migracoes novas.
+When updating or fixing an existing installation, run `enviar-banco-supabase.bat` again before rebuilding and choose option **1**. The initial migration is idempotent: it completes missing structures, recreates functions and access policies, and preserves existing accounts, messages, and other data. The script then applies any new migrations.
 
-Somente o compilador precisa de Node.js. Os usuarios finais recebem um `.exe` autocontido e nao precisam de Node.js, Python ou Docker.
+Only the compiler requires Node.js. End users receive a self-contained `.exe` and do not need Node.js, Python, or Docker.
 
-## Substituir um repositorio no GitHub
+## Replacing a GitHub Repository
 
-Execute `publicar-github-git-bash.bat` para usar o Git Bash. O arquivo e hibrido e autocontido: a parte BAT localiza o Git for Windows e a parte Bash executa toda a verificacao e publicacao. Tambem e possivel passar a URL como primeiro argumento:
+Run `publicar-github-git-bash.bat` to use Git Bash. The file is hybrid and self-contained: the BAT portion locates Git for Windows, while the Bash portion performs the entire verification and publishing process. You can also pass the repository URL as the first argument:
 
 ```bat
 publicar-github-git-bash.bat https://github.com/usuario/repositorio.git
 ```
 
-O script consulta o remoto antes de enviar. Se a branch padrao ja tiver conteudo, ele exibe um alerta e exige que seja digitado `SUBSTITUIR` antes do `git push --force`. Apenas a branch padrao do repositorio informado e substituida; credenciais nao sao salvas no projeto e ficam a cargo do Git Credential Manager. O `publicar-github.bat` original continua incluido como alternativa baseada no Prompt de Comando.
+The script checks the remote before pushing. If the default branch already contains content, it displays a warning and requires `SUBSTITUIR` to be typed before running `git push --force`. Only the default branch of the specified repository is replaced; credentials are not stored in the project and are handled by Git Credential Manager. The original `publicar-github.bat` remains included as a Command Prompt-based alternative.
 
-## Comandos de desenvolvimento
+## Development Commands
 
 ```text
 npm install
@@ -88,19 +88,19 @@ npm run dev
 npm run build:desktop
 ```
 
-Copie `.env.example` para `.env.local` quando nao utilizar o fluxo automatico. Nunca exponha `SUPABASE_SERVICE_ROLE_KEY` no Electron nem em variaveis `VITE_*`.
+Copy `.env.example` to `.env.local` when not using the automated workflow. Never expose `SUPABASE_SERVICE_ROLE_KEY` in Electron or in `VITE_*` variables.
 
-## Estrutura
+## Structure
 
 ```text
-apps/api             API Next.js para Vercel
-apps/local-server    mesma API em Hono, ligada em 0.0.0.0
+apps/api             Next.js API for Vercel
+apps/local-server    same API using Hono, listening on 0.0.0.0
 apps/desktop         Electron + Vite + React + TypeScript
-packages/contracts   validacao e tipos compartilhados
-packages/server-core autorizacao Supabase e tokens LiveKit
-supabase/migrations  esquema, funcoes e politicas RLS
-infra                LiveKit local
-scripts              preparacao automatizada do ambiente LAN
+packages/contracts   shared validation and types
+packages/server-core Supabase authorization and LiveKit tokens
+supabase/migrations  schema, functions, and RLS policies
+infra                local LiveKit
+scripts              automated LAN environment setup
 ```
 
-Consulte [docs/ARQUITETURA.md](docs/ARQUITETURA.md) e [docs/SEGURANCA.md](docs/SEGURANCA.md) antes de colocar o ambiente em producao.
+See [docs/ARQUITETURA.md](docs/ARQUITETURA.md) and [docs/SEGURANCA.md](docs/SEGURANCA.md) before deploying the environment to production.
