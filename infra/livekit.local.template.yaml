@@ -1,0 +1,16 @@
+port: 7880
+bind_addresses:
+  - "0.0.0.0"
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  use_external_ip: false
+  node_ip: "__LAN_IP__"
+keys:
+  devkey: secret-local-discord2
+logging:
+  level: info
+room:
+  auto_create: true
+  empty_timeout: 300
+  departure_timeout: 20

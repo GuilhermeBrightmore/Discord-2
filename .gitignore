@@ -1,0 +1,17 @@
+node_modules/
+.next/
+.turbo/
+dist/
+dist-electron/
+release/
+out/
+coverage/
+*.log
+*.tsbuildinfo
+.env
+.env.local
+.env.runtime
+.local-runtime.env
+infra/livekit.local.runtime.yaml
+.vercel/
+infra/data/
